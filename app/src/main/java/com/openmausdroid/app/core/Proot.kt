@@ -70,7 +70,7 @@ object Proot {
             }
             dest.setExecutable(true)
             runCatching {
-                Runtime.getRuntime().exec(arrayOf("/system/bin/chmod", "755", dest.absolutePath)).waitFor()
+                java.lang.Runtime.getRuntime().exec(arrayOf("/system/bin/chmod", "755", dest.absolutePath)).waitFor()
             }
         }
         Runtime.append("$binName: ${dest.absolutePath} (executable=${dest.canExecute()})")
