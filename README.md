@@ -60,13 +60,16 @@ CI builds the APK (see `.github/workflows/build-apk.yml`):
    `libproot.so`/`libttyd.so`: some ROMs refuse `exec()` from the app data
    dir, so the app runs the helpers from its native lib dir when possible
    (asset copies in `files/bin/` remain as fallback).
-2. Gradle builds `assembleRelease`.
+3. Best-effort: a Termux-built `proot` (plus `libtalloc`, `libandroid-shmem`)
+   is fetched from the Termux apt repo as `libprootT.so`. It is linked
+   against bionic for the app seccomp policy, so setup smoke-tests both
+   proot builds on-device and uses the first one that runs a guest command.
+4. Gradle builds `assembleRelease`.
 
 The APK is uploaded as a workflow artifact, and attached to a GitHub release
-when a `v*` tag is pushed. Release signing is optional: add the repository
-secrets `MAUS_KEYSTORE_B64` (base64-encoded keystore), `MAUS_KEYSTORE_PASSWORD`,
-`MAUS_KEY_ALIAS` and `MAUS_KEY_PASSWORD`; without them the build is
-debug-signed.
+when a `v*` tag is pushed. Release builds are signed with a stable key held
+in the repository secrets `MAUS_KEYSTORE_*`, so a newer release installs as
+an update over an older one (no uninstall needed).
 
 To build locally, place the same three files in
 `app/src/main/assets/bundle/` and run `./gradlew assembleRelease`.

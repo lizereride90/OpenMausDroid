@@ -37,6 +37,33 @@ jobs:
           mkdir -p ../../jniLibs/arm64-v8a
           cp proot ../../jniLibs/arm64-v8a/libproot.so
           cp ttyd ../../jniLibs/arm64-v8a/libttyd.so
+          # Best-effort: Termux-built proot (bionic-linked, Android-native
+          # syscall profile) plus its shared libs, as a fallback candidate
+          # for ROMs whose seccomp policy kills the generic static build.
+          TPOOL=https://packages.termux.dev/apt/termux-main
+          PKGIDX=$(curl -fsSL --retry 2 "$TPOOL/dists/stable/main/binary-aarch64/Packages" || true)
+          for p in proot libtalloc libandroid-shmem; do
+            f=$(printf '%s' "$PKGIDX" | awk -v pkg="$p" 'BEGIN{RS=""; FS="\n"} $0 ~ "(^|\n)Package: "pkg"(\n|$)" {for(i=1;i<=NF;i++) if($i ~ /^Filename: /){sub(/^Filename: /,"",$i); print $i; exit}}')
+            if [ -n "$f" ]; then
+              curl -fsSL --retry 2 -o "/tmp/$p.deb" "$TPOOL/$f" && echo "got $p" || echo "skip $p"
+            else
+              echo "skip $p (not in index)"
+            fi
+          done
+          if [ -f /tmp/proot.deb ] && [ -f /tmp/libtalloc.deb ] && [ -f /tmp/libandroid-shmem.deb ]; then
+            rm -rf /tmp/tx && mkdir -p /tmp/tx/proot /tmp/tx/talloc /tmp/tx/shmem
+            (cd /tmp/tx/proot && ar x /tmp/proot.deb data.tar.* && tar -xf data.tar.*) || echo "extract failed: proot"
+            (cd /tmp/tx/talloc && ar x /tmp/libtalloc.deb data.tar.* && tar -xf data.tar.*) || echo "extract failed: talloc"
+            (cd /tmp/tx/shmem && ar x /tmp/libandroid-shmem.deb data.tar.* && tar -xf data.tar.*) || echo "extract failed: shmem"
+            find /tmp/tx/proot -name proot -type f -size +50k -exec cp {} ../../jniLibs/arm64-v8a/libprootT.so \;
+            find /tmp/tx/talloc -name 'libtalloc.so*' -exec cp {} ../../jniLibs/arm64-v8a/ \;
+            find /tmp/tx/shmem -name 'libandroid-shmem.so' -exec cp {} ../../jniLibs/arm64-v8a/ \;
+            sudo apt-get install -y -q patchelf >/dev/null 2>&1 || true
+            patchelf --set-rpath '$ORIGIN' ../../jniLibs/arm64-v8a/libprootT.so \
+              && patchelf --print-rpath ../../jniLibs/arm64-v8a/libprootT.so || echo "no rpath patch"
+          else
+            echo "termux proot unavailable, single-proot build"
+          fi
           ls -lh
           ls -lh ../../jniLibs/arm64-v8a
 

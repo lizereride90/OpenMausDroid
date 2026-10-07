@@ -14,6 +14,10 @@ object Prefs {
         get() = prefs.getInt("setup_version", 0)
         set(value) = prefs.edit().putInt("setup_version", value).apply()
 
+    var activeProotPath: String
+        get() = prefs.getString("active_proot", "").orEmpty()
+        set(value) = prefs.edit().putString("active_proot", value).apply()
+
     var promptEnforced: Boolean
         get() = prefs.getBoolean("prompt_enforced", false)
         set(value) = prefs.edit().putBoolean("prompt_enforced", value).apply()

@@ -31,15 +31,21 @@ object Setup {
                 return@runCatching
             }
             Runtime.resetForSetup()
+            Runtime.append(
+                "device: sdk=${android.os.Build.VERSION.SDK_INT} " +
+                    "abi=${android.os.Build.SUPPORTED_ABIS.firstOrNull()} " +
+                    "fp=${android.os.Build.FINGERPRINT.take(100)}",
+            )
 
             val cacheDir = File(context.filesDir, "cache").apply { mkdirs() }
             val tarball = File(cacheDir, "ubuntu.tar.gz")
 
-            val proot = Proot.prootBin
-            Runtime.append("proot: ${proot.absolutePath} (executable=${proot.canExecute()})")
-            if (!proot.canExecute()) {
-                throw IOException("proot is not executable on this device: ${proot.absolutePath}")
-            }
+            val cands = Proot.candidates()
+            if (cands.isEmpty()) throw IOException("no proot binary bundled on this install")
+            Runtime.append(
+                "proot candidates: " +
+                    cands.joinToString { "${it.name}(exec=${it.canExecute()})" },
+            )
             Runtime.append("copying bundled environment files")
             // NOTE: the asset is named *.bin (gzipped content) because aapt2
             // gunzips *.gz assets and strips the extension at packaging time.
@@ -74,6 +80,8 @@ object Setup {
             }
             if (!marker.exists()) {
                 installSetupFiles(Proot.ttydBin)
+                val proot = selectProot()
+                Runtime.append("using proot: ${proot.absolutePath}")
                 Runtime.phase.value = Runtime.Phase.BOOTSTRAP
                 Runtime.append("bootstrapping environment (apt, Node, OpenMausBot, VNC)")
                 val (code, out) = Proot.run(
@@ -89,6 +97,36 @@ object Setup {
         }.onFailure {
             Runtime.fail("${it::class.java.simpleName}: ${it.message ?: "setup failed"}")
         }
+    }
+
+    /**
+     * Smoke-tests each bundled proot and returns the first one that runs a
+     * guest command. Stage A (--version) exercises proot startup only; stage B
+     * (/bin/true in the rootfs) exercises tracing plus guest libc startup.
+     */
+    private fun selectProot(): File {
+        val failures = mutableListOf<String>()
+        for (cand in Proot.candidates()) {
+            Runtime.append("probing ${cand.name}")
+            val (vc, vout) = Proot.probe(listOf(cand.absolutePath, "--version"))
+            Runtime.append("--version -> exit $vc ${vout.trim().take(200)}")
+            if (vc != 0) {
+                failures += "${cand.name}: startup exit $vc"
+                continue
+            }
+            val (tc, tout) = Proot.probe(
+                listOf(cand.absolutePath, "-0", "-r", Proot.rootfs.absolutePath, "/bin/true"),
+                timeoutMs = 30_000,
+            )
+            if (tc != 0) {
+                Runtime.append("guest /bin/true -> exit $tc ${tout.trim().take(300)}")
+                failures += "${cand.name}: guest exit $tc"
+                continue
+            }
+            Proot.useProot(cand)
+            return cand
+        }
+        throw IOException("no working proot on this device (${failures.joinToString("; ")})")
     }
 
     /** Places the setup scripts and ttyd inside the rootfs at /setup. */

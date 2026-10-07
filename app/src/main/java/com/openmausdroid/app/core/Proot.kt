@@ -19,8 +19,12 @@ object Proot {
 
     lateinit var prootBin: File
         private set
+    lateinit var activeProot: File
+        private set
     lateinit var ttydBin: File
         private set
+    private lateinit var libDir: String
+    private val helperCandidates = mutableListOf<File>()
     lateinit var rootfs: File
         private set
     lateinit var logsDir: File
@@ -32,11 +36,30 @@ object Proot {
         "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
     fun init(context: Context) {
+        libDir = context.applicationInfo.nativeLibraryDir
         prootBin = resolveHelper(context, "libproot.so", "bundle/proot", "proot")
         ttydBin = resolveHelper(context, "libttyd.so", "bundle/ttyd", "ttyd")
+        helperCandidates.clear()
+        // Termux-built proot first: it is linked against bionic and built for
+        // the app seccomp policy, so it survives on ROMs that kill the
+        // generic static build at startup.
+        File(libDir, "libprootT.so").takeIf { it.isFile }?.let { helperCandidates += it }
+        if (prootBin.isFile && !helperCandidates.contains(prootBin)) helperCandidates += prootBin
+        val remembered = Prefs.activeProotPath.takeIf { it.isNotEmpty() }?.let(::File)
+        activeProot = remembered?.takeIf { it.isFile && it.canExecute() }
+            ?: helperCandidates.firstOrNull { it.canExecute() }
+            ?: prootBin
         rootfs = File(context.filesDir, "rootfs")
         logsDir = File(context.filesDir, "logs")
         logsDir.mkdirs()
+    }
+
+    /** Ordered proot candidates for the setup smoke ladder. */
+    fun candidates(): List<File> = helperCandidates.toList()
+
+    fun useProot(f: File) {
+        activeProot = f
+        Prefs.activeProotPath = f.absolutePath
     }
 
     /**
@@ -94,7 +117,7 @@ object Proot {
 
     private fun baseCommand(extraEnv: Map<String, String> = emptyMap()): MutableList<String> {
         val cmd = mutableListOf(
-            prootBin.absolutePath,
+            activeProot.absolutePath,
             "-l",              // link2symlink: Android FS may refuse hardlinks
             "-0",              // fake root inside the guest
             "--kill-on-exit",  // kill guest children when proot dies
@@ -119,9 +142,11 @@ object Proot {
     ): Result<Pair<Int, String>> = withContext(Dispatchers.IO) {
         runCatching {
             val cmd = baseCommand(extraEnv) + listOf("/bin/bash", "-lc", script)
-            val process = ProcessBuilder(cmd)
-                .redirectErrorStream(true)
-                .start()
+            val pb = ProcessBuilder(cmd).redirectErrorStream(true)
+            // Lets a bionic-linked proot (Termux build) find its bundled
+            // libs. The guest never sees this: env -i resets its environment.
+            pb.environment()["LD_LIBRARY_PATH"] = libDir
+            val process = pb.start()
             val out = StringBuilder()
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val watcher = Thread {
@@ -140,7 +165,7 @@ object Proot {
                 watcher.join(2000)
                 throw RuntimeException("command timed out after ${timeoutMs / 1000}s")
             }
-            watcher.join(3000)
+            watcher.join(15000)
             val text = synchronized(out) { out.toString() }
             Result.success(process.exitValue() to text)
         }.fold(
@@ -158,16 +183,50 @@ object Proot {
         running[name]?.let { if (it.isAlive) return true }
         return try {
             val cmd = baseCommand(extraEnv) + listOf("/bin/bash", "-lc", script)
-            val process = ProcessBuilder(cmd)
+            val pb = ProcessBuilder(cmd)
                 .redirectErrorStream(true)
                 .redirectOutput(File(logsDir, "$name.log"))
-                .start()
+            pb.environment()["LD_LIBRARY_PATH"] = libDir
+            val process = pb.start()
             running[name] = process
             Runtime.append("started $name")
             true
         } catch (e: Exception) {
             Runtime.append("failed to start $name: ${e.message}")
             false
+        }
+    }
+
+    /**
+     * Runs a raw host command (outside the guest) and returns its exit code
+     * plus combined output. Used by the setup smoke ladder to find a proot
+     * binary that survives on this device. Exit 159 (128+SIGSYS) means a
+     * seccomp kill.
+     */
+    fun probe(cmd: List<String>, timeoutMs: Long = 20_000): Pair<Int, String> {
+        return try {
+            val pb = ProcessBuilder(cmd).redirectErrorStream(true)
+            pb.environment()["LD_LIBRARY_PATH"] = libDir
+            val process = pb.start()
+            val out = StringBuilder()
+            val reader = Thread {
+                try {
+                    process.inputStream.bufferedReader().forEachLine { line ->
+                        synchronized(out) { out.appendLine(line) }
+                    }
+                } catch (_: Exception) {}
+            }
+            reader.isDaemon = true
+            reader.start()
+            if (!waitFor(process, timeoutMs)) {
+                process.destroyForcibly()
+                reader.join(2000)
+                return -1 to "timed out after ${timeoutMs / 1000}s"
+            }
+            reader.join(5000)
+            process.exitValue() to synchronized(out) { out.toString() }
+        } catch (e: Exception) {
+            -1 to (e.message ?: e::class.java.simpleName)
         }
     }
 
