@@ -52,7 +52,8 @@ CI builds the APK (see `.github/workflows/build-apk.yml`):
 
 1. The workflow downloads the runtime bundle into
    `app/src/main/assets/bundle/` (git-ignored):
-   - `ubuntu.tar.gz` (ubuntu-base-24.04.5-base-arm64 rootfs)
+    - `ubuntu-rootfs.bin` (ubuntu-base-24.04.5-base-arm64 rootfs, gzipped -
+      renamed because aapt2 gunzips `*.gz` assets and strips the extension)
    - `proot` (ysdragon/proot-static v5.4.0, `proot-aarch64-static`)
    - `ttyd` (ttyd 1.7.7, `ttyd.aarch64`)
 2. Gradle builds `assembleRelease`.

@@ -39,7 +39,9 @@ object Setup {
 
             Runtime.append("copying bundled environment files")
             copyAsset(context, "bundle/proot", proot)
-            copyAsset(context, "bundle/ubuntu.tar.gz", tarball)
+            // NOTE: the asset is named *.bin (gzipped content) because aapt2
+            // gunzips *.gz assets and strips the extension at packaging time.
+            copyAsset(context, "bundle/ubuntu-rootfs.bin", tarball)
             copyAsset(context, "bundle/ttyd", ttyd)
             proot.setExecutable(true)
             ttyd.setExecutable(true)
@@ -54,8 +56,15 @@ object Setup {
                 }
                 Proot.rootfs.mkdirs()
                 Runtime.append("extracting Ubuntu rootfs (this can take a few minutes)")
-                Archive.extractTarGz(tarball, Proot.rootfs) { p ->
-                    Runtime.setupProgress.value = p * 0.7f
+                try {
+                    Archive.extractTarGz(tarball, Proot.rootfs) { p ->
+                        Runtime.setupProgress.value = p * 0.7f
+                    }
+                } catch (e: Exception) {
+                    // A corrupt/incomplete tarball would fail identically on every
+                    // retry, so delete it - the next run re-copies it from the APK.
+                    runCatching { tarball.delete() }
+                    throw e
                 }
                 if (!extracted.createNewFile()) {
                     throw IllegalStateException("could not stamp the extracted rootfs")
@@ -77,7 +86,7 @@ object Setup {
             Prefs.setupVersion = Runtime.SETUP_VERSION
             Runtime.setupProgress.value = 1f
         }.onFailure {
-            Runtime.fail(it.message ?: "setup failed")
+            Runtime.fail("${it::class.java.simpleName}: ${it.message ?: "setup failed"}")
         }
     }
 

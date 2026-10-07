@@ -28,6 +28,9 @@ jobs:
             "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64"
           chmod +x proot ttyd
           gzip -t ubuntu.tar.gz
+          # aapt2 silently gunzips *.gz assets and strips the extension, so the
+          # tarball must be packaged under a name that does not end in .gz.
+          mv ubuntu.tar.gz ubuntu-rootfs.bin
           ls -lh
 
       - name: Configure signing (optional)
