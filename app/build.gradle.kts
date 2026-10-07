@@ -55,6 +55,11 @@ android {
     }
 
     packaging {
+        jniLibs {
+            // Required when the manifest sets extractNativeLibs="true"
+            // (our helper binaries must be extracted to the lib dir).
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
