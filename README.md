@@ -54,8 +54,12 @@ CI builds the APK (see `.github/workflows/build-apk.yml`):
    `app/src/main/assets/bundle/` (git-ignored):
     - `ubuntu-rootfs.bin` (ubuntu-base-24.04.5-base-arm64 rootfs, gzipped -
       renamed because aapt2 gunzips `*.gz` assets and strips the extension)
-   - `proot` (ysdragon/proot-static v5.4.0, `proot-aarch64-static`)
-   - `ttyd` (ttyd 1.7.7, `ttyd.aarch64`)
+    - `proot` (ysdragon/proot-static v5.4.0, `proot-aarch64-static`)
+    - `ttyd` (ttyd 1.7.7, `ttyd.aarch64`)
+2. `proot`/`ttyd` are also copied to `app/src/main/jniLibs/arm64-v8a/` as
+   `libproot.so`/`libttyd.so`: some ROMs refuse `exec()` from the app data
+   dir, so the app runs the helpers from its native lib dir when possible
+   (asset copies in `files/bin/` remain as fallback).
 2. Gradle builds `assembleRelease`.
 
 The APK is uploaded as a workflow artifact, and attached to a GitHub release

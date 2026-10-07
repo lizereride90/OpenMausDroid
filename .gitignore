@@ -14,6 +14,8 @@ captures/
 # CI-downloaded runtime bundle (never committed)
 app/src/main/assets/bundle/ubuntu.tar.gz
 app/src/main/assets/bundle/ubuntu-rootfs.bin
+# CI-placed native helper libs (libproot.so, libttyd.so)
+app/src/main/jniLibs/
 app/src/main/assets/bundle/ubuntu-base.tar.gz
 app/src/main/assets/bundle/proot
 app/src/main/assets/bundle/ttyd

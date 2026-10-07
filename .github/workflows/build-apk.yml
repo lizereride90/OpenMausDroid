@@ -31,7 +31,14 @@ jobs:
           # aapt2 silently gunzips *.gz assets and strips the extension, so the
           # tarball must be packaged under a name that does not end in .gz.
           mv ubuntu.tar.gz ubuntu-rootfs.bin
+          # Some ROMs refuse to exec() binaries from the app data dir, so ship
+          # proot/ttyd as native libs too: the installer extracts them to the
+          # app's lib/ dir (executable) and the app runs them from there.
+          mkdir -p ../../jniLibs/arm64-v8a
+          cp proot ../../jniLibs/arm64-v8a/libproot.so
+          cp ttyd ../../jniLibs/arm64-v8a/libttyd.so
           ls -lh
+          ls -lh ../../jniLibs/arm64-v8a
 
       - name: Configure signing (optional)
         env:

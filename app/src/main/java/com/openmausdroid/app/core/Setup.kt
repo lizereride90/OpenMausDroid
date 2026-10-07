@@ -5,6 +5,7 @@ import com.openmausdroid.app.OpenMausApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 /**
  * First-run preparation of the Ubuntu rootfs.
@@ -31,24 +32,24 @@ object Setup {
             }
             Runtime.resetForSetup()
 
-            val binDir = File(context.filesDir, "bin").apply { mkdirs() }
             val cacheDir = File(context.filesDir, "cache").apply { mkdirs() }
-            val proot = File(binDir, "proot")
             val tarball = File(cacheDir, "ubuntu.tar.gz")
-            val ttyd = File(cacheDir, "ttyd")
 
+            val proot = Proot.prootBin
+            Runtime.append("proot: ${proot.absolutePath} (executable=${proot.canExecute()})")
+            if (!proot.canExecute()) {
+                throw IOException("proot is not executable on this device: ${proot.absolutePath}")
+            }
             Runtime.append("copying bundled environment files")
-            copyAsset(context, "bundle/proot", proot)
             // NOTE: the asset is named *.bin (gzipped content) because aapt2
             // gunzips *.gz assets and strips the extension at packaging time.
             copyAsset(context, "bundle/ubuntu-rootfs.bin", tarball)
-            copyAsset(context, "bundle/ttyd", ttyd)
-            proot.setExecutable(true)
-            ttyd.setExecutable(true)
 
             Runtime.phase.value = Runtime.Phase.EXTRACTING
             val marker = File(Proot.rootfs, "etc/maus-bootstrap-done")
-            val extracted = File(Proot.rootfs, ".rootfs-extracted")
+            // Bump the suffix whenever the extractor changes so devices with a
+            // tree stamped by older code wipe and re-extract cleanly.
+            val extracted = File(Proot.rootfs, ".rootfs-extracted-v2")
             if (!extracted.exists()) {
                 if (Proot.rootfs.exists()) {
                     Runtime.append("clearing incomplete rootfs")
@@ -72,7 +73,7 @@ object Setup {
                 Runtime.append("rootfs extracted")
             }
             if (!marker.exists()) {
-                installSetupFiles(ttyd)
+                installSetupFiles(Proot.ttydBin)
                 Runtime.phase.value = Runtime.Phase.BOOTSTRAP
                 Runtime.append("bootstrapping environment (apt, Node, OpenMausBot, VNC)")
                 val (code, out) = Proot.run(

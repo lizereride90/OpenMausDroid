@@ -19,6 +19,8 @@ object Proot {
 
     lateinit var prootBin: File
         private set
+    lateinit var ttydBin: File
+        private set
     lateinit var rootfs: File
         private set
     lateinit var logsDir: File
@@ -30,10 +32,49 @@ object Proot {
         "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
     fun init(context: Context) {
-        prootBin = File(context.filesDir, "bin/proot")
+        prootBin = resolveHelper(context, "libproot.so", "bundle/proot", "proot")
+        ttydBin = resolveHelper(context, "libttyd.so", "bundle/ttyd", "ttyd")
         rootfs = File(context.filesDir, "rootfs")
         logsDir = File(context.filesDir, "logs")
         logsDir.mkdirs()
+    }
+
+    /**
+     * Locates a runnable host helper binary. Some ROMs refuse exec() from the
+     * app data dir, so the primary source is the app's native lib dir (the
+     * installer extracts lib/*.so there with the exec bit set). If that is
+     * missing, falls back to copying the asset into files/bin with 755.
+     */
+    private fun resolveHelper(
+        context: Context,
+        libName: String,
+        assetPath: String,
+        binName: String,
+    ): File {
+        val lib = File(context.applicationInfo.nativeLibraryDir, libName)
+        if (lib.isFile) {
+            Runtime.append("$binName: ${lib.absolutePath} (executable=${lib.canExecute()})")
+            if (lib.canExecute()) return lib
+        } else {
+            Runtime.append("$binName: no bundled $libName, copying from assets")
+        }
+        val dest = File(context.filesDir, "bin/$binName").apply { parentFile?.mkdirs() }
+        if (!(dest.isFile && dest.length() > 0 && dest.canExecute())) {
+            val tmp = File(dest.parentFile, dest.name + ".part")
+            context.assets.open(assetPath).use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (!tmp.renameTo(dest)) {
+                tmp.copyTo(dest, overwrite = true)
+                tmp.delete()
+            }
+            dest.setExecutable(true)
+            runCatching {
+                Runtime.getRuntime().exec(arrayOf("/system/bin/chmod", "755", dest.absolutePath)).waitFor()
+            }
+        }
+        Runtime.append("$binName: ${dest.absolutePath} (executable=${dest.canExecute()})")
+        return dest
     }
 
     private fun binds(): List<String> {

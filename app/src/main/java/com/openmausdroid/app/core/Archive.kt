@@ -12,39 +12,20 @@ import java.nio.file.Paths
 import java.util.zip.GZIPInputStream
 
 /**
- * Extracts the bundled ubuntu-base tarball into the rootfs directory.
- * Prefers Android's built-in tar (toybox), then falls back to a pure-Kotlin
- * extractor covering what ubuntu-base ships: regular files, directories,
- * symlinks, hardlinks, GNU long names and pax headers.
+ * Extracts the bundled ubuntu-base tarball into the rootfs directory with a
+ * pure-Kotlin extractor covering what ubuntu-base ships: regular files,
+ * directories, symlinks, hardlinks, GNU long names and pax headers.
+ *
+ * This deliberately avoids the platform tar (toybox): it fails on hardlinks
+ * without root and refuses to create absolute symlinks, both of which the
+ * rootfs needs. Entries escaping the destination dir are skipped.
  */
 object Archive {
 
     fun extractTarGz(archive: File, destDir: File, onProgress: (Float) -> Unit) {
         destDir.mkdirs()
-        if (extractWithSystemTar(archive, destDir)) {
-            onProgress(1f)
-            return
-        }
-        extractWithKotlin(archive, destDir, onProgress)
-    }
-
-    private fun extractWithSystemTar(archive: File, destDir: File): Boolean {
-        val candidates = listOf(
-            listOf("/system/bin/toybox", "tar", "-xzf", archive.absolutePath, "-C", destDir.absolutePath),
-            listOf("/system/bin/tar", "-xzf", archive.absolutePath, "-C", destDir.absolutePath),
-        )
-        for (cmd in candidates) {
-            if (!File(cmd[0]).exists()) continue
-            try {
-                val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
-                val out = p.inputStream.bufferedReader().readText()
-                if (p.waitFor() == 0) return true
-                Runtime.append("system tar failed: ${out.takeLast(300)}")
-            } catch (e: Exception) {
-                Runtime.append("system tar unavailable: ${e.message}")
-            }
-        }
-        return false
+        val base = runCatching { destDir.canonicalPath }.getOrDefault(destDir.absolutePath)
+        extract(archive, destDir, base, onProgress)
     }
 
     private class PendingLink(val link: File, val target: File)
@@ -81,7 +62,7 @@ object Archive {
     private const val TYPE_PAX = 120       // 'x'
     private const val TYPE_PAX_GLOBAL = 103 // 'g'
 
-    private fun extractWithKotlin(archive: File, destDir: File, onProgress: (Float) -> Unit) {
+    private fun extract(archive: File, destDir: File, base: String, onProgress: (Float) -> Unit) {
         val total = archive.length().coerceAtLeast(1)
         val pending = mutableListOf<PendingLink>()
         BufferedInputStream(FileInputStream(archive), 1 shl 16).use { fileIn ->
@@ -112,10 +93,15 @@ object Archive {
                 longName = null
                 longLink = null
                 val out = File(destDir, name.removePrefix("/"))
+                if (!isInside(base, out)) {
+                    skipBodyAndPad(gzip, header.size)
+                    continue
+                }
                 when (header.type) {
                     TYPE_DIR -> { out.mkdirs(); skipBodyAndPad(gzip, header.size) }
                     TYPE_REG -> {
                         out.parentFile?.mkdirs()
+                        removeForReplace(out)
                         out.outputStream().use { copyBody(gzip, it, header.size) }
                         skipPad(gzip, header.size)
                         applyMode(out, header.mode)
@@ -127,7 +113,7 @@ object Archive {
                     }
                     TYPE_SYMLINK -> {
                         out.parentFile?.mkdirs()
-                        out.delete()
+                        removeForReplace(out)
                         runCatching { Files.createSymbolicLink(out.toPath(), Paths.get(link)) }
                         skipBodyAndPad(gzip, header.size)
                     }
@@ -241,6 +227,21 @@ object Archive {
             if (n < 0) throw IOException("truncated file body")
             out.write(buf, 0, n)
             remaining -= n
+        }
+    }
+
+    private fun isInside(base: String, f: File): Boolean =
+        runCatching {
+            val c = f.canonicalPath
+            c == base || c.startsWith(base + File.separatorChar)
+        }.getOrDefault(false)
+
+    /** Clears whatever a previous (partial) extraction left at this path. */
+    private fun removeForReplace(out: File) {
+        runCatching {
+            if (out.exists() || Files.isSymbolicLink(out.toPath())) {
+                if (!out.delete()) out.deleteRecursively()
+            }
         }
     }
 
