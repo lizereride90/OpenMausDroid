@@ -43,7 +43,7 @@ jobs:
           TPOOL=https://packages.termux.dev/apt/termux-main
           PKGIDX=$(curl -fsSL --retry 2 "$TPOOL/dists/stable/main/binary-aarch64/Packages" || true)
           for p in proot libtalloc libandroid-shmem; do
-            f=$(printf '%s' "$PKGIDX" | awk -v pkg="$p" 'BEGIN{RS=""; FS="\n"} $0 ~ "(^|\n)Package: "pkg"(\n|$)" {for(i=1;i<=NF;i++) if($i ~ /^Filename: /){sub(/^Filename: /,"",$i); print $i; exit}}')
+            f=$(printf '%s' "$PKGIDX" | awk -v pkg="$p" 'BEGIN{RS=""; FS="\n"} $0 ~ "(^|\n)Package: "pkg"(\n|$)" {for(i=1;i<=NF;i++) if($i ~ /^Filename: /){sub(/^Filename: /,"",$i); print $i; exit}}' || true)
             if [ -n "$f" ]; then
               curl -fsSL --retry 2 -o "/tmp/$p.deb" "$TPOOL/$f" && echo "got $p" || echo "skip $p"
             else
