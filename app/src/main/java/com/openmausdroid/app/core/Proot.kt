@@ -137,7 +137,7 @@ object Proot {
         process.destroy()
         Thread {
             try {
-                if (!process.waitFor(4000)) process.destroyForcibly()
+                if (!waitFor(process, 4000)) process.destroyForcibly()
             } catch (_: Exception) {}
         }.apply { isDaemon = true; start() }
     }

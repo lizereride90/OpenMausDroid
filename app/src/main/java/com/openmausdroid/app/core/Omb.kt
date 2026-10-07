@@ -80,13 +80,13 @@ object Omb {
         requestRaw("DELETE", path, null)
     }
 
-    private fun request(method: String, path: String, body: String?): JSONObject {
+    private suspend fun request(method: String, path: String, body: String?): JSONObject {
         val text = requestRaw(method, path, body)
         if (text.isBlank()) return JSONObject()
         return JSONObject(text)
     }
 
-    private fun requestRaw(method: String, path: String, body: String?): String =
+    private suspend fun requestRaw(method: String, path: String, body: String?): String =
         withContext(Dispatchers.IO) {
             val builder = Request.Builder()
                 .url("$BASE$path")

@@ -85,7 +85,7 @@ class MausService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private suspend fun runEnvironment() {
+    private suspend fun CoroutineScope.runEnvironment() {
         val setup = Setup.prepare(applicationContext)
         if (setup.isFailure || !isActive) return
 
