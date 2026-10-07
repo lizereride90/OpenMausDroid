@@ -42,8 +42,8 @@ object Proot {
     /**
      * Locates a runnable host helper binary. Some ROMs refuse exec() from the
      * app data dir, so the primary source is the app's native lib dir (the
-     * installer extracts lib/*.so there with the exec bit set). If that is
-     * missing, falls back to copying the asset into files/bin with 755.
+     * installer extracts bundled .so files there with the exec bit set). If
+     * that is missing, falls back to copying the asset into files/bin.
      */
     private fun resolveHelper(
         context: Context,
