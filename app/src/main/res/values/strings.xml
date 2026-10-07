@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenMausDroid</string>
+    <string name="tab_chat">Chat</string>
+    <string name="tab_bots">Bots</string>
+    <string name="tab_terminal">Terminal</string>
+    <string name="tab_desktop">Desktop</string>
+    <string name="tab_settings">Settings</string>
+    <string name="notification_title">OpenMausDroid is running</string>
+    <string name="notification_text">The agent harness and Ubuntu environment are active.</string>
+    <string name="notification_channel">Environment</string>
+    <string name="send">Send</string>
+    <string name="message_hint">Message the bot…</string>
+</resources>

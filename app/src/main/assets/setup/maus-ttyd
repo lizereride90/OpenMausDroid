@@ -1,0 +1,16 @@
+#!/bin/bash
+# Web terminal bound to loopback; the app's Terminal tab loads it in a WebView.
+set -u
+
+export HOME=/root
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export TERM="${TERM:-xterm-256color}"
+
+TTYD_PORT="${TTYD_PORT:-7681}"
+[ -x /usr/local/bin/ttyd ] || { echo "ttyd is not installed"; exit 1; }
+
+exec /usr/local/bin/ttyd \
+  --interface 127.0.0.1 \
+  --port "$TTYD_PORT" \
+  --writable \
+  /bin/bash --login -i

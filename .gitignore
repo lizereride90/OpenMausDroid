@@ -1,0 +1,19 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.cxx/
+*.apk
+*.keystore
+*.jks
+
+# CI-downloaded runtime bundle (never committed)
+app/src/main/assets/bundle/ubuntu.tar.gz
+app/src/main/assets/bundle/ubuntu-base.tar.gz
+app/src/main/assets/bundle/proot
+app/src/main/assets/bundle/ttyd
+app/src/main/assets/bundle/*.part

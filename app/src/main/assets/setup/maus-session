@@ -1,0 +1,96 @@
+#!/bin/bash
+# One XFCE/VNC session. Runs in the foreground: the app keeps the owning proot
+# process alive for the life of the session and stops it by terminating us.
+#   maus-session start <n>   display :n, VNC 5900+n, noVNC http://127.0.0.1:6080+n
+#   maus-session stop <n>    best-effort stop when we are not the supervisor
+set -u
+
+usage() { echo "usage: maus-session {start|stop} <n>"; exit 1; }
+[ $# -ge 2 ] || usage
+action=$1; n=$2
+case "$n" in ''|*[!0-9]*) usage;; esac
+[ "$n" -ge 1 ] && [ "$n" -le 32 ] || usage
+
+vncport=$((5900 + n))
+webport=$((6080 + n))
+vnclog="/var/log/maus/vnc-$n.log"
+xfcelog="/var/log/maus/xfce-$n.log"
+weblog="/var/log/maus/web-$n.log"
+vncpidfile="/run/maus/session-$n.vnc.pid"
+webpidfile="/run/maus/session-$n.web.pid"
+xfcepidfile="/run/maus/session-$n.xfce.pid"
+
+port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+stop_now() {
+  trap - TERM INT
+  for f in "$xfcepidfile" "$webpidfile" "$vncpidfile"; do
+    if [ -f "$f" ]; then kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; fi
+  done
+  pkill -f "Xvnc :$n -rfbauth" 2>/dev/null || true
+  pkill -f "websockify .* $webport " 2>/dev/null || true
+  sleep 1
+  echo "[session $n] stopped"
+  exit 0
+}
+
+if [ "$action" = "stop" ]; then stop_now; fi
+[ "$action" = "start" ] || usage
+
+mkdir -p /run/maus /var/log/maus
+[ -f /root/.vnc/passwd ] || { echo "[session $n] missing /root/.vnc/passwd"; exit 1; }
+if port_open "$vncport"; then
+  echo "[session $n] already running on port $vncport"
+  exit 0
+fi
+
+echo "[session $n] starting Xvnc on :$n"
+Xvnc ":$n" \
+  -rfbauth /root/.vnc/passwd \
+  -localhost \
+  -geometry 1280x800 \
+  -depth 24 \
+  -SecurityTypes VncAuth \
+  -desktop "OpenMausDroid session $n" \
+  >"$vnclog" 2>&1 &
+vncpid=$!
+echo "$vncpid" > "$vncpidfile"
+
+ready=0
+for _ in $(seq 1 100); do
+  if port_open "$vncport"; then ready=1; break; fi
+  if ! kill -0 "$vncpid" 2>/dev/null; then
+    echo "[session $n] Xvnc exited early:"
+    tail -n 20 "$vnclog" 2>/dev/null
+    rm -f "$vncpidfile"
+    exit 1
+  fi
+  sleep 0.2
+done
+[ "$ready" = 1 ] || { echo "[session $n] Xvnc did not open its port"; tail -n 20 "$vnclog"; exit 1; }
+
+echo "[session $n] starting XFCE"
+export DISPLAY=":$n"
+export XDG_RUNTIME_DIR=/run/maus
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+dbus-launch --exit-with-session startxfce4 >"$xfcelog" 2>&1 &
+xfcepid=$!
+echo "$xfcepid" > "$xfcepidfile"
+
+echo "[session $n] starting noVNC on 127.0.0.1:$webport"
+websockify --web /opt/noVNC --addr 127.0.0.1 "$webport" "127.0.0.1:$vncport" >"$weblog" 2>&1 &
+webpid=$!
+echo "$webpid" > "$webpidfile"
+
+echo "[session $n] ready: http://127.0.0.1:$webport/vnc.html"
+trap stop_now TERM INT
+while true; do
+  sleep 5
+  for p in "$vncpid" "$xfcepid" "$webpid"; do
+    if ! kill -0 "$p" 2>/dev/null; then
+      echo "[session $n] a component exited, stopping session"
+      stop_now
+    fi
+  done
+done

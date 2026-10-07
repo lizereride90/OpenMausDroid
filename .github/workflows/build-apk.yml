@@ -1,0 +1,81 @@
+name: build-apk
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download runtime bundle
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/bundle
+          cd app/src/main/assets/bundle
+          curl -fL --retry 3 -o ubuntu.tar.gz \
+            "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz"
+          curl -fL --retry 3 -o proot \
+            "https://github.com/ysdragon/proot-static/releases/download/v5.4.0/proot-aarch64-static"
+          curl -fL --retry 3 -o ttyd \
+            "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64"
+          chmod +x proot ttyd
+          gzip -t ubuntu.tar.gz
+          ls -lh
+
+      - name: Configure signing (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.MAUS_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MAUS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MAUS_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.MAUS_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > /tmp/release.keystore
+            echo "MAUS_KEYSTORE=/tmp/release.keystore" >> "$GITHUB_ENV"
+            echo "MAUS_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "MAUS_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "MAUS_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "Release signing enabled."
+          else
+            echo "No keystore secrets - APK will be debug-signed."
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          src=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          cp "$src" OpenMausDroid.apk
+          ls -lh OpenMausDroid.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenMausDroid-apk
+          path: OpenMausDroid.apk
+          if-no-files-found: error
+
+      - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: OpenMausDroid.apk
