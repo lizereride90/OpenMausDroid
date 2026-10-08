@@ -57,6 +57,10 @@ jobs:
             (cd /tmp/tx/shmem && ar x /tmp/libandroid-shmem.deb && tar -xf data.tar.*) || echo "extract failed: shmem"
             find /tmp/tx/proot -name proot -type f -size +50k -exec cp {} ../../jniLibs/arm64-v8a/libprootT.so \;
             find /tmp/tx/talloc -name 'libtalloc.so*' -exec cp {} ../../jniLibs/arm64-v8a/ \;
+            # proot's DT_NEEDED names libtalloc.so.2 exactly - make sure that
+            # filename exists no matter which libtalloc files the deb carried.
+            TALLOC_SRC=$(find ../../jniLibs/arm64-v8a -maxdepth 1 -name 'libtalloc.so*' | head -n 1 || true)
+            if [ -n "$TALLOC_SRC" ]; then cp "$TALLOC_SRC" ../../jniLibs/arm64-v8a/libtalloc.so.2; fi
             find /tmp/tx/shmem -name 'libandroid-shmem.so' -exec cp {} ../../jniLibs/arm64-v8a/ \;
             sudo apt-get install -y -q patchelf >/dev/null 2>&1 || true
             patchelf --set-rpath '$ORIGIN' ../../jniLibs/arm64-v8a/libprootT.so \
