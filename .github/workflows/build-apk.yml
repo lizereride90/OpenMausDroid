@@ -52,9 +52,9 @@ jobs:
           done
           if [ -f /tmp/proot.deb ] && [ -f /tmp/libtalloc.deb ] && [ -f /tmp/libandroid-shmem.deb ]; then
             rm -rf /tmp/tx && mkdir -p /tmp/tx/proot /tmp/tx/talloc /tmp/tx/shmem
-            (cd /tmp/tx/proot && ar x /tmp/proot.deb data.tar.* && tar -xf data.tar.*) || echo "extract failed: proot"
-            (cd /tmp/tx/talloc && ar x /tmp/libtalloc.deb data.tar.* && tar -xf data.tar.*) || echo "extract failed: talloc"
-            (cd /tmp/tx/shmem && ar x /tmp/libandroid-shmem.deb data.tar.* && tar -xf data.tar.*) || echo "extract failed: shmem"
+            (cd /tmp/tx/proot && ar x /tmp/proot.deb && tar -xf data.tar.*) || echo "extract failed: proot"
+            (cd /tmp/tx/talloc && ar x /tmp/libtalloc.deb && tar -xf data.tar.*) || echo "extract failed: talloc"
+            (cd /tmp/tx/shmem && ar x /tmp/libandroid-shmem.deb && tar -xf data.tar.*) || echo "extract failed: shmem"
             find /tmp/tx/proot -name proot -type f -size +50k -exec cp {} ../../jniLibs/arm64-v8a/libprootT.so \;
             find /tmp/tx/talloc -name 'libtalloc.so*' -exec cp {} ../../jniLibs/arm64-v8a/ \;
             find /tmp/tx/shmem -name 'libandroid-shmem.so' -exec cp {} ../../jniLibs/arm64-v8a/ \;
