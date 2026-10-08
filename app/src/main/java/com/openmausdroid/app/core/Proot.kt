@@ -23,6 +23,7 @@ object Proot {
         private set
     lateinit var ttydBin: File
         private set
+    private lateinit var loaderBin: File
     private lateinit var libDir: String
     private val helperCandidates = mutableListOf<File>()
     lateinit var rootfs: File
@@ -41,6 +42,10 @@ object Proot {
         libDir = context.applicationInfo.nativeLibraryDir
         prootBin = resolveHelper(context, "libproot.so", "bundle/proot", "proot")
         ttydBin = resolveHelper(context, "libttyd.so", "bundle/ttyd", "ttyd")
+        // Termux proot expects this helper at Termux's private libexec path.
+        // Keep it beside the executable helpers and override that hard-coded path.
+        loaderBin = File(libDir, "libprootloader.so")
+        Runtime.append("proot loader: ${loaderBin.absolutePath} (executable=${loaderBin.canExecute()})")
         helperCandidates.clear()
         // Termux-built proot first: it is linked against bionic and built for
         // the app seccomp policy, so it survives on ROMs that kill the
@@ -115,6 +120,10 @@ object Proot {
         pb.environment()["LD_LIBRARY_PATH"] = libDir
         pb.environment()["PROOT_TMP_DIR"] = tmpDir.absolutePath
         pb.environment()["TMPDIR"] = tmpDir.absolutePath
+        pb.environment()["PROOT_LOADER"] = loaderBin.absolutePath
+        // Some Android kernels kill proot's seccomp tracer with SIGSYS. The
+        // ptrace-only path is slower but works on affected ROMs.
+        pb.environment()["PROOT_NO_SECCOMP"] = "1"
     }
 
     private fun binds(): List<String> {

@@ -56,6 +56,9 @@ jobs:
             (cd /tmp/tx/talloc && ar x /tmp/libtalloc.deb && tar -xf data.tar.*) || echo "extract failed: talloc"
             (cd /tmp/tx/shmem && ar x /tmp/libandroid-shmem.deb && tar -xf data.tar.*) || echo "extract failed: shmem"
             find /tmp/tx/proot -name proot -type f -size +50k -exec cp {} ../../jniLibs/arm64-v8a/libprootT.so \;
+            # Termux proot otherwise tries its hard-coded Termux-private
+            # loader path. The app sets PROOT_LOADER to this static helper.
+            find /tmp/tx/proot -path '*/libexec/proot/loader' -type f -exec cp {} ../../jniLibs/arm64-v8a/libprootloader.so \;
             find /tmp/tx/talloc -name 'libtalloc.so*' -exec cp {} ../../jniLibs/arm64-v8a/ \;
             find /tmp/tx/shmem -name 'libandroid-shmem.so' -exec cp {} ../../jniLibs/arm64-v8a/ \;
             sudo apt-get install -y -q patchelf >/dev/null 2>&1 || true
@@ -68,6 +71,7 @@ jobs:
                 && echo "patched prootT NEEDED libtalloc.so.2 -> libtalloc.so"
             fi
             rm -f ../../jniLibs/arm64-v8a/libtalloc.so.2 ../../jniLibs/arm64-v8a/libtalloc.so.2.5.0
+            test -s ../../jniLibs/arm64-v8a/libprootloader.so
             patchelf --print-needed ../../jniLibs/arm64-v8a/libprootT.so
           else
             echo "termux proot unavailable, single-proot build"
