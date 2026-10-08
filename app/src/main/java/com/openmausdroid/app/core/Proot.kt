@@ -29,6 +29,8 @@ object Proot {
         private set
     lateinit var logsDir: File
         private set
+    lateinit var tmpDir: File
+        private set
 
     private val running = ConcurrentHashMap<String, Process>()
 
@@ -52,6 +54,11 @@ object Proot {
         rootfs = File(context.filesDir, "rootfs")
         logsDir = File(context.filesDir, "logs")
         logsDir.mkdirs()
+        // The Termux-built proot defaults to /data/data/com.termux/files/usr/tmp
+        // and Android has no /tmp - without a writable dir it aborts with
+        // "can't create temporary directory". PROOT_TMP_DIR overrides that.
+        tmpDir = File(context.filesDir, "tmp")
+        tmpDir.mkdirs()
     }
 
     /** Ordered proot candidates for the setup smoke ladder. */
@@ -100,6 +107,16 @@ object Proot {
         return dest
     }
 
+    /**
+     * Environment for the host-side proot process. The guest never sees this:
+     * its environment is reset by the `env -i` in [baseCommand].
+     */
+    private fun applyHostEnv(pb: ProcessBuilder) {
+        pb.environment()["LD_LIBRARY_PATH"] = libDir
+        pb.environment()["PROOT_TMP_DIR"] = tmpDir.absolutePath
+        pb.environment()["TMPDIR"] = tmpDir.absolutePath
+    }
+
     private fun binds(): List<String> {
         val args = mutableListOf<String>()
         fun bind(host: String) {
@@ -144,8 +161,9 @@ object Proot {
             val cmd = baseCommand(extraEnv) + listOf("/bin/bash", "-lc", script)
             val pb = ProcessBuilder(cmd).redirectErrorStream(true)
             // Lets a bionic-linked proot (Termux build) find its bundled
-            // libs. The guest never sees this: env -i resets its environment.
-            pb.environment()["LD_LIBRARY_PATH"] = libDir
+            // libs and its temp dir. The guest never sees this: env -i resets
+            // its environment.
+            applyHostEnv(pb)
             val process = pb.start()
             val out = StringBuilder()
             val reader = BufferedReader(InputStreamReader(process.inputStream))
@@ -186,7 +204,7 @@ object Proot {
             val pb = ProcessBuilder(cmd)
                 .redirectErrorStream(true)
                 .redirectOutput(File(logsDir, "$name.log"))
-            pb.environment()["LD_LIBRARY_PATH"] = libDir
+            applyHostEnv(pb)
             val process = pb.start()
             running[name] = process
             Runtime.append("started $name")
@@ -206,7 +224,7 @@ object Proot {
     fun probe(cmd: List<String>, timeoutMs: Long = 20_000): Pair<Int, String> {
         return try {
             val pb = ProcessBuilder(cmd).redirectErrorStream(true)
-            pb.environment()["LD_LIBRARY_PATH"] = libDir
+            applyHostEnv(pb)
             val process = pb.start()
             val out = StringBuilder()
             val reader = Thread {
