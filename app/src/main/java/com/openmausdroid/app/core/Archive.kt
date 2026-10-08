@@ -151,7 +151,9 @@ object Archive {
             linkName = block.copyOfRange(157, 257),
             mode = octal(block, 100, 8),
             size = octal(block, 124, 12),
-            type = if (typeByte == 0) TYPE_REG else typeByte,
+            // Regular files come as NUL or ASCII '0' (48). Missing the latter
+            // silently skips every regular file, leaving a symlink-only tree.
+            type = if (typeByte == 0 || typeByte == '0'.code) TYPE_REG else typeByte,
         )
     }
 

@@ -55,7 +55,7 @@ object Setup {
             val marker = File(Proot.rootfs, "etc/maus-bootstrap-done")
             // Bump the suffix whenever the extractor changes so devices with a
             // tree stamped by older code wipe and re-extract cleanly.
-            val extracted = File(Proot.rootfs, ".rootfs-extracted-v2")
+            val extracted = File(Proot.rootfs, ".rootfs-extracted-v3")
             if (!extracted.exists()) {
                 if (Proot.rootfs.exists()) {
                     Runtime.append("clearing incomplete rootfs")
@@ -72,6 +72,14 @@ object Setup {
                     // retry, so delete it - the next run re-copies it from the APK.
                     runCatching { tarball.delete() }
                     throw e
+                }
+                // exists() follows symlinks, so this verifies regular files were
+                // written and that /bin -> usr/bin resolves to a real binary.
+                val missing = listOf("bin/true", "bin/bash", "usr/bin/env", "usr/bin/dpkg")
+                    .filter { !File(Proot.rootfs, it).exists() }
+                if (missing.isNotEmpty()) {
+                    runCatching { tarball.delete() }
+                    throw IOException("rootfs extraction incomplete, missing: ${missing.joinToString()}")
                 }
                 if (!extracted.createNewFile()) {
                     throw IllegalStateException("could not stamp the extracted rootfs")
@@ -114,10 +122,7 @@ object Setup {
                 failures += "${cand.name}: startup exit $vc"
                 continue
             }
-            val (tc, tout) = Proot.probe(
-                listOf(cand.absolutePath, "-0", "-r", Proot.rootfs.absolutePath, "/bin/true"),
-                timeoutMs = 30_000,
-            )
+            val (tc, tout) = Proot.probeGuest(cand, listOf("/bin/true"))
             if (tc != 0) {
                 Runtime.append("guest /bin/true -> exit $tc ${tout.trim().take(300)}")
                 failures += "${cand.name}: guest exit $tc"

@@ -230,6 +230,22 @@ object Proot {
         }
     }
 
+    /**
+     * Smoke-runs a guest command with the exact flag set real sessions use
+     * (-l, -0, --kill-on-exit, binds), so the ladder rejects candidates that
+     * would fail later in bootstrap.
+     */
+    fun probeGuest(cand: File, guest: List<String>, timeoutMs: Long = 30_000): Pair<Int, String> {
+        val cmd = mutableListOf(
+            cand.absolutePath,
+            "-l", "-0", "--kill-on-exit",
+            "-r", rootfs.absolutePath,
+        )
+        cmd += binds()
+        cmd += listOf("-w", "/") + guest
+        return probe(cmd, timeoutMs)
+    }
+
     fun isAlive(name: String): Boolean = running[name]?.isAlive == true
 
     fun stop(name: String) {
