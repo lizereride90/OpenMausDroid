@@ -18,8 +18,40 @@ fi
 mkdir -p /run/maus /var/log/maus /root/.vnc /root/.openmausbot /root/.cache
 chmod 700 /run/maus
 
-log "[1/7] updating the package index"
+log "[1/7] configuring DNS and updating the package index"
+# Ubuntu base images ship an empty resolv.conf. Android's resolver is not
+# available to guest glibc, so provide public resolvers before contacting APT.
+cat > /etc/resolv.conf <<'EOF'
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+options timeout:2 attempts:3
+EOF
+# Base image has no CA store; install the bundled one so HTTPS works.
+install -Dm644 /setup/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# Point APT at ports over HTTPS and mark the repo trusted. Signature
+# verification via gpgv/apt-key is unreliable under proot (the faked root
+# user breaks apt-key's readability checks), so we rely on TLS instead.
+rm -f /etc/apt/sources.list
+cat > /etc/apt/sources.list.d/ubuntu.sources <<'EOF'
+Types: deb
+URIs: https://ports.ubuntu.com/ubuntu-ports
+Suites: noble noble-updates noble-backports noble-security
+Components: main restricted universe multiverse
+Trusted: yes
+EOF
+# Many Android networks are IPv4-only and ports.ubuntu.com advertises IPv6
+# first, so force IPv4 and retry to avoid multi-minute stalls.
+cat > /etc/apt/apt.conf.d/99openmaus <<'EOF'
+Acquire::ForceIPv4 "true";
+Acquire::Retries "3";
+Acquire::https::Timeout "20";
+EOF
+rm -rf /var/lib/apt/lists/*
 apt-get update -y
+if ! compgen -G "/var/lib/apt/lists/*_Packages*" > /dev/null; then
+  log "apt update completed without any package indexes"
+  exit 1
+fi
 
 log "[2/7] installing desktop, VNC and base tools"
 apt-get install -y --no-install-recommends \

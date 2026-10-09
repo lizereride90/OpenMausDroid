@@ -137,13 +137,19 @@ object Setup {
     /** Places the setup scripts and ttyd inside the rootfs at /setup. */
     private fun installSetupFiles(ttyd: File) {
         val setupDir = File(Proot.rootfs, "setup").apply { mkdirs() }
-        val scripts = listOf("bootstrap.sh", "maus-session", "maus-harness", "maus-ttyd")
-        for (name in scripts) {
+        val setupFiles = listOf(
+            "bootstrap.sh",
+            "maus-session",
+            "maus-harness",
+            "maus-ttyd",
+            "ca-certificates.crt",
+        )
+        for (name in setupFiles) {
             val dest = File(setupDir, name)
             OpenMausApp.instance.assets.open("setup/$name").use { input ->
                 dest.outputStream().use { output -> input.copyTo(output) }
             }
-            dest.setExecutable(true, false)
+            if (name != "ca-certificates.crt") dest.setExecutable(true, false)
         }
         ttyd.copyTo(File(setupDir, "ttyd"), overwrite = true)
         File(setupDir, "ttyd").setExecutable(true, false)

@@ -18,7 +18,12 @@ jobs:
       - name: Download runtime bundle
         run: |
           set -euo pipefail
-          mkdir -p app/src/main/assets/bundle
+          mkdir -p app/src/main/assets/bundle app/src/main/assets/setup
+          # The Ubuntu base image ships an empty CA store, so first-run APT
+          # over HTTPS has nothing to verify ports.ubuntu.com against. Bundle
+          # the runner's standard Mozilla CA bundle; bootstrap installs it.
+          install -m 644 /etc/ssl/certs/ca-certificates.crt \
+            app/src/main/assets/setup/ca-certificates.crt
           cd app/src/main/assets/bundle
           curl -fL --retry 3 -o ubuntu.tar.gz \
             "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz"
