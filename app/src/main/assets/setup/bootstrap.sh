@@ -58,7 +58,7 @@ apt-get install -y --no-install-recommends \
   ca-certificates curl git unzip xz-utils procps iproute2 net-tools \
   dbus-x11 fonts-dejavu-core xfonts-base \
   xfce4 xfce4-terminal \
-  tigervnc-standalone-server tigervnc-common \
+  tigervnc-standalone-server tigervnc-common tigervnc-tools \
   websockify python3
 
 log "[2b/7] installing icon themes (optional)"
@@ -93,7 +93,7 @@ log "[7/7] finalizing"
 if [ -f /setup/ttyd ]; then
   install -m 755 /setup/ttyd /usr/local/bin/ttyd
 fi
-printf 'openmaus\nopenmaus\n' | vncpasswd -f > /root/.vnc/passwd
+printf 'openmaus\nopenmaus\n' | tigervncpasswd -f > /root/.vnc/passwd
 chmod 600 /root/.vnc/passwd
 install -m 755 /setup/maus-session /usr/local/bin/maus-session
 install -m 755 /setup/maus-harness /usr/local/bin/maus-harness

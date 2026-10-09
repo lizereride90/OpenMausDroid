@@ -27,7 +27,7 @@ stop_now() {
   for f in "$xfcepidfile" "$webpidfile" "$vncpidfile"; do
     if [ -f "$f" ]; then kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; fi
   done
-  pkill -f "Xvnc :$n -rfbauth" 2>/dev/null || true
+  pkill -f "tigervnc :$n -rfbauth" 2>/dev/null || true
   pkill -f "websockify .* $webport " 2>/dev/null || true
   sleep 1
   echo "[session $n] stopped"
@@ -44,8 +44,8 @@ if port_open "$vncport"; then
   exit 0
 fi
 
-echo "[session $n] starting Xvnc on :$n"
-Xvnc ":$n" \
+echo "[session $n] starting Xtigervnc on :$n"
+Xtigervnc ":$n" \
   -rfbauth /root/.vnc/passwd \
   -localhost \
   -geometry 1280x800 \
@@ -60,14 +60,14 @@ ready=0
 for _ in $(seq 1 100); do
   if port_open "$vncport"; then ready=1; break; fi
   if ! kill -0 "$vncpid" 2>/dev/null; then
-    echo "[session $n] Xvnc exited early:"
+    echo "[session $n] Xtigervnc exited early:"
     tail -n 20 "$vnclog" 2>/dev/null
     rm -f "$vncpidfile"
     exit 1
   fi
   sleep 0.2
 done
-[ "$ready" = 1 ] || { echo "[session $n] Xvnc did not open its port"; tail -n 20 "$vnclog"; exit 1; }
+[ "$ready" = 1 ] || { echo "[session $n] Xtigervnc did not open its port"; tail -n 20 "$vnclog"; exit 1; }
 
 echo "[session $n] starting XFCE"
 export DISPLAY=":$n"
